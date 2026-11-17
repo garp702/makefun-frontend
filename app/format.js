@@ -80,3 +80,13 @@ export function ago(iso, now = Date.now()) {
   const minutes = Math.floor(ms / 60_000);
   return minutes > 0 ? `${minutes}m ago` : 'just now';
 }
+
+/** Load the lazy views' stylesheet (lazy.css) once, on first use. */
+export function viewCss() {
+  if (document.getElementById('vcss')) return;
+  const l = document.createElement('link');
+  l.id = 'vcss';
+  l.rel = 'stylesheet';
+  l.href = '/lazy.css';
+  document.head.append(l);
+}

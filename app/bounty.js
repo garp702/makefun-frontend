@@ -2,10 +2,7 @@
 // bounty route is opened, so they cost the board's first load nothing.
 
 import { assetUrl, getCompetition, getLeaderboard } from './api.js';
-import { ago, count, dateOnly, dateTime, esc, isClosed, money, timeLeft, urgency, winRate } from './format.js';
-
-const PAGE_SIZE = 50;
-const lbState = { slug: null, entries: [], shown: PAGE_SIZE, title: '' };
+import { ago, count, dateOnly, dateTime, esc, isClosed, money, timeLeft, urgency, viewCss, winRate } from './format.js';
 
 /** Minimal, safe markdown for bounty descriptions: headings, lists, bold, code. */
 export function renderMarkdown(md) {
@@ -79,10 +76,10 @@ export function bountyView(b) {
     <h1>${esc(b.title)}</h1>
     <p class="summary">${esc(b.summary ?? '')}</p>
     <div class="stat-grid">
-      <div class="stat"><span class="stat-value gold">${money(b.potUsd ?? b.rewardAmount)}</span><span class="stat-label">Live pot</span></div>
-      <div class="stat"><span class="stat-value">${fee}</span><span class="stat-label">Entry fee</span></div>
-      <div class="stat"><span class="stat-value">${count(b.submissionCount)}</span><span class="stat-label">Entries</span></div>
-      <div class="stat"><span class="stat-value">${dateOnly(b.deadline)}</span><span class="stat-label">Deadline</span></div>
+      <div class="stat"><span class="sval gold">${money(b.potUsd ?? b.rewardAmount)}</span><span class="slab">Live pot</span></div>
+      <div class="stat"><span class="sval">${fee}</span><span class="slab">Entry fee</span></div>
+      <div class="stat"><span class="sval">${count(b.submissionCount)}</span><span class="slab">Entries</span></div>
+      <div class="stat"><span class="sval">${dateOnly(b.deadline)}</span><span class="slab">Deadline</span></div>
     </div>
     <dl class="facts">
       <dt>Deadline</dt><dd>${dateTime(b.deadline)}</dd>
@@ -103,63 +100,84 @@ export function bountyView(b) {
   ${latest ? `<section class="panel"><h2>Latest entries</h2><ul class="entries">${latest}</ul></section>` : ''}`;
 }
 
-export function leaderboardRows(entries, shown) {
-  return entries.slice(0, shown).map((e) => {
-    const v = e.values ?? {};
-    const j = e.judge ?? {};
-    const record = j.matches ? `${j.wins ?? 0}W · ${j.draws ?? 0}D · ${j.losses ?? 0}L` : '—';
-    const avatar = e.image ? `<img class="avatar" crossorigin="anonymous" src="${esc(assetUrl(e.image))}" alt="" loading="lazy">` : '';
-    return `
-    <tr${e.rank <= 3 ? ' class="podium"' : ''}>
-      <td class="num strong">${e.rank}</td>
-      <td><span class="entrant">${avatar}<a href="#/u/${encodeURIComponent(e.handle)}">@${esc(e.handle)}</a></span></td>
-      <td class="title-cell">${esc(e.title ?? '')}</td>
-      <td class="num strong gold">${winRate(v.judge)}</td>
-      <td class="num muted">${v.judge_low != null ? `${winRate(v.judge_low)} – ${winRate(v.judge_high)}` : '—'}</td>
-      <td class="num muted">${record}</td>
-      <td class="num muted">${v.bytes ? `${Math.round(v.bytes / 1024)} KB` : '—'}</td>
-    </tr>`;
-  }).join('');
+// The leaderboard is windowed: every entry is fetched once, but only
+// the visible slice of rows is in the DOM. windowedRows() renders that
+// slice between two spacer rows that hold the height of the rows above
+// and below, so the scrollbar still spans the full ranking.
+const LB_ROW_H = 42; // px; re-measured from the first real row after mount
+const lb = { entries: [], title: '', rowH: LB_ROW_H, headH: 0, start: -1, end: -1, box: null, body: null };
+
+function lbRow(e) {
+  const v = e.values ?? {};
+  const j = e.judge ?? {};
+  const record = j.matches ? `${j.wins ?? 0}W · ${j.draws ?? 0}D · ${j.losses ?? 0}L` : '—';
+  const avatar = e.image ? `<img class="avatar" crossorigin="anonymous" src="${esc(assetUrl(e.image))}" alt="" loading="lazy">` : '';
+  return `<tr data-row${e.rank <= 3 ? ' class="podium"' : ''}><td class="num strong">${e.rank}</td><td><span class="entrant">${avatar}<a href="#/u/${encodeURIComponent(e.handle)}">@${esc(e.handle)}</a></span></td><td class="title-cell">${esc(e.title ?? '')}</td><td class="num strong gold">${winRate(v.judge)}</td><td class="num muted">${v.judge_low != null ? `${winRate(v.judge_low)} – ${winRate(v.judge_high)}` : '—'}</td><td class="num muted">${record}</td><td class="num muted">${v.bytes ? `${Math.round(v.bytes / 1024)} KB` : '—'}</td></tr>`;
 }
 
-export function leaderboardView(slug, data, shown) {
-  const total = lbState.entries.length;
+function windowedRows() {
+  const { box, body, entries } = lb;
+  if (!box || !body) return;
+  const st = Math.max(0, box.scrollTop - lb.headH);
+  const start = Math.max(0, Math.floor(st / lb.rowH) - 8);
+  const end = Math.min(entries.length, Math.ceil((st + box.clientHeight) / lb.rowH) + 8);
+  if (start === lb.start && end === lb.end) return;
+  lb.start = start;
+  lb.end = end;
+  const above = start * lb.rowH, below = (entries.length - end) * lb.rowH;
+  body.innerHTML =
+    (above ? `<tr class="sp"><td colspan="7" style="height:${above}px"></td></tr>` : '') +
+    entries.slice(start, end).map(lbRow).join('') +
+    (below ? `<tr class="sp"><td colspan="7" style="height:${below}px"></td></tr>` : '');
+}
+
+export function leaderboardView(slug, data) {
+  const total = lb.entries.length;
   return `
-  <p class="crumbs"><a href="#/bounty/${encodeURIComponent(slug)}">← ${esc(lbState.title || 'Bounty')}</a> · <a href="#/">All bounties</a></p>
+  <p class="crumbs"><a href="#/bounty/${encodeURIComponent(slug)}">← ${esc(lb.title || 'Bounty')}</a> · <a href="#/">All bounties</a></p>
   <section class="panel">
     <h1>Leaderboard</h1>
-    <p class="summary">${esc(data.phase?.title ?? 'Results')} · ranked by judge win rate · ${count(total)} ranked entries${data.competition?.placements === 'after_finalize' ? ' · placements settle after the final' : ''}</p>
+    <p class="summary">${esc(data.phase?.title ?? 'Results')} · ranked by judge win rate · ${count(total)} ranked entries${data.competition?.placements === 'after_finalize' ? ' · placements settle after the final' : ''} · windowed: only the rows on screen are in the DOM, scroll for the rest</p>
     ${total === 0 ? '<p class="note">No ranked entries yet — judging is still running.</p>' : `
-    <div class="table-wrap"><table class="table lb">
+    <div class="lbwin" id="lbwin"><table class="table lb">
       <thead><tr><th class="num">#</th><th>Entrant</th><th>Entry</th><th class="num">Win rate</th><th class="num">90% range</th><th class="num">Record</th><th class="num">Size</th></tr></thead>
-      <tbody>${leaderboardRows(lbState.entries, shown)}</tbody>
-    </table></div>
-    ${shown < total ? `<button class="btn" id="lb-more">Show more (${count(total - shown)} remaining)</button>` : ''}`}
+      <tbody id="lbbody"></tbody>
+    </table></div>`}
   </section>`;
 }
 
-function bindMore(app, route, data) {
-  const more = document.getElementById('lb-more');
-  if (!more) return;
-  more.addEventListener('click', () => {
-    lbState.shown += PAGE_SIZE;
-    app.innerHTML = leaderboardView(route.slug, data, lbState.shown);
-    bindMore(app, route, data);
-    window.__shotReady = true;
+function mountWindowedRows(app) {
+  lb.box = app.querySelector('#lbwin');
+  lb.body = app.querySelector('#lbbody');
+  lb.start = -1;
+  lb.end = -1;
+  if (!lb.box) return;
+  lb.box.addEventListener('scroll', () => requestAnimationFrame(windowedRows), { passive: true });
+  windowedRows();
+  requestAnimationFrame(() => {
+    const head = lb.box.querySelector('thead');
+    if (head) lb.headH = head.offsetHeight;
+    const row = lb.body.querySelector('tr[data-row]');
+    if (row && row.offsetHeight > 0 && row.offsetHeight !== lb.rowH) {
+      lb.rowH = row.offsetHeight;
+      lb.start = -1;
+      windowedRows();
+    }
   });
 }
 
 export async function renderBountyRoute(app, route) {
+  viewCss();
   if (route.name === 'leaderboard') {
     app.innerHTML = '<section class="panel"><p class="note">Loading the leaderboard…</p></section>';
     const data = await getLeaderboard(route.slug);
-    lbState.slug = route.slug;
-    lbState.entries = data.entries ?? [];
-    lbState.shown = PAGE_SIZE;
-    lbState.title = data.competition?.title ?? '';
-    document.title = `Leaderboard · ${lbState.title} | make.fun`;
-    app.innerHTML = leaderboardView(route.slug, data, lbState.shown);
-    bindMore(app, route, data);
+    lb.entries = data.entries ?? [];
+    lb.title = data.competition?.title ?? '';
+    lb.rowH = LB_ROW_H;
+    lb.headH = 0;
+    document.title = `Leaderboard · ${lb.title} | make.fun`;
+    app.innerHTML = leaderboardView(route.slug, data);
+    mountWindowedRows(app);
     return;
   }
   app.innerHTML = '<section class="panel"><p class="note">Loading the bounty…</p></section>';

@@ -3,28 +3,182 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="A fast, read-only make.fun frontend: live bounty pots, entry fees, countdowns, leaderboards and profiles, straight from the public API.">
 <title>make.fun — live bounties</title>
-<link rel="stylesheet" href="/style.css">
-<script type="module" src="/main.js"></script>
+<style>
+/* Shell + board, inline: first load is this one page. View styles: lazy.css. */
+:root{--bg:#0a0d13;--p:#12161f;--p2:#171c28;--ln:#232b3d;--tx:#e9edf5;--mu:#97a1b5;--gd:#f2b33d;--gn:#3ecf8e;--vi:#8b7cff;--rd:#ff7a7a;--r:14px}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(1100px 480px at 70% -80px,#1b1430 0,var(--bg) 55%) fixed,var(--bg);color:var(--tx);font:16px/1.55 system-ui,sans-serif}
+a{color:var(--vi);text-decoration:none}
+a:hover{text-decoration:underline}
+#topbar{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:22px;flex-wrap:wrap;padding:12px 18px;background:rgba(10,13,19,.88);border-bottom:1px solid var(--ln)}
+.brand{color:var(--tx);font-weight:800;font-size:20px;letter-spacing:-.02em}
+.brand:hover{text-decoration:none}
+.brand-mark{color:var(--gd)}
+#topbar nav{display:flex;gap:16px;font-size:14px}
+#topbar nav a{color:var(--mu)}
+#topbar nav a:hover{color:var(--tx)}
+#pf{margin-left:auto;display:flex;gap:6px}
+#pf input{background:var(--p2);border:1px solid var(--ln);border-radius:9px;color:var(--tx);padding:7px 10px;width:210px;font-size:14px}
+#pf button,.btn{background:var(--vi);color:#fff;border:0;border-radius:9px;padding:7px 14px;font-size:14px;font-weight:600;cursor:pointer}
+#pf button:hover,.btn:hover{filter:brightness(1.12)}
+main,#foot{max-width:1120px;margin:0 auto;padding-left:18px;padding-right:18px}
+main{padding-top:26px;padding-bottom:40px}
+#foot{padding-bottom:36px;color:var(--mu);font-size:13px}
+.loading,.note,.hero-sub{color:var(--mu)}
+.err{background:var(--p);border:1px solid #5a2626;border-radius:var(--r);padding:20px}
+.hero h1{font-size:34px;margin:0 0 4px;letter-spacing:-.02em}
+.hero-sub{margin:0 0 6px}
+.hero-stats{font-size:15px;margin:0 0 18px;color:var(--mu)}
+.hero-stats b{color:var(--tx);font-size:19px;font-variant-numeric:tabular-nums}
+.hero-stats .gold{color:var(--gd)}
+.sort-row{display:flex;align-items:center;gap:8px;margin-bottom:16px}
+.sort-label{color:var(--mu);font-size:12px;text-transform:uppercase;letter-spacing:.07em}
+button.badge{cursor:pointer;font-family:inherit}
+button.badge.on{color:var(--tx);border-color:var(--vi);background:#241f45}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(325px,1fr));gap:14px}
+.card{background:var(--p);border:1px solid var(--ln);border-radius:var(--r);padding:16px;display:flex;flex-direction:column;gap:8px}
+.card.closed{opacity:.62}
+.ctop{display:flex;gap:8px;align-items:center}
+.cttl{font-size:18px;line-height:1.3;margin:0}
+.cttl a{color:var(--tx)}
+.cttl a:hover{color:var(--vi);text-decoration:none}
+.cby{color:var(--mu);font-size:13px;margin:0}
+.cpot{display:flex;align-items:baseline;justify-content:space-between;border-top:1px dashed var(--ln);border-bottom:1px dashed var(--ln);padding:8px 0}
+.plab{color:var(--mu);font-size:12px;text-transform:uppercase;letter-spacing:.07em}
+.pval{color:var(--gd);font-size:27px;font-weight:800;font-variant-numeric:tabular-nums}
+.cmeta{display:flex;flex-wrap:wrap;gap:6px}
+.clinks{margin-top:auto;padding-top:6px;font-size:14px;font-weight:600}
+.badge{font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:var(--p);border:1px solid var(--ln);color:var(--mu);white-space:nowrap}
+.badge.live{color:var(--gn)}
+.badge.cat{color:var(--tx)}
+.badge.fee,.badge.time.warm{color:var(--gd)}
+.badge.time.hot{color:var(--rd)}
+@media (max-width:640px){.hero h1{font-size:27px}#pf{margin-left:0;width:100%}#pf input{flex:1;width:auto}.grid{grid-template-columns:1fr}}
+</style>
 </head>
 <body>
 <header id="topbar">
-  <a class="brand" href="#/"><span class="brand-mark">◆</span> make.fun</a>
-  <nav>
-    <a href="#/">Bounty board</a>
-    <a href="https://make.fun" rel="noopener">make.fun ↗</a>
-  </nav>
-  <form id="profile-form" role="search">
-    <input id="profile-handle" type="text" placeholder="View a profile — @handle" aria-label="Profile handle" autocomplete="off">
-    <button type="submit">View</button>
-  </form>
+<a class="brand" href="#/"><span class="brand-mark">◆</span> make.fun</a>
+<nav><a href="#/">Bounty board</a><a href="https://make.fun">make.fun ↗</a></nav>
+<form id="pf"><input id="ph" type="text" placeholder="View a profile — @handle" autocomplete="off"><button type="submit">View</button></form>
 </header>
-<main id="app">
-  <p class="loading">Loading live bounties…</p>
-</main>
-<footer id="foot">
-  <p>Read-only frontend on make.fun's public API. Pots, fees and countdowns are live; a bounty past its deadline counts as closed even while the API still lists it open.</p>
-</footer>
+<main id="app"><p class="loading">Loading live bounties…</p></main>
+<footer id="foot">Read-only frontend on make.fun's public API — pots, fees and countdowns are live.</footer>
+<script type="module">
+// Router + board; bounty/profile views load by import() on first visit.
+// Routes: #/ · #/bounty/<slug> · #/bounty/<slug>/leaderboard · #/u/<handle>
+// window.__shotReady: false while a route loads, true once data renders.
+const app = document.getElementById('app');
+const enc = encodeURIComponent;
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+const usd = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? '$' + n.toLocaleString('en-US', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 }) : '—';
+};
+const num = (v) => Number(v ?? 0).toLocaleString('en-US');
+const closedAt = (b, now = Date.now()) => new Date(b.deadline).getTime() <= now;
+const left = (iso, now = Date.now()) => {
+  const ms = new Date(iso).getTime() - now;
+  if (ms <= 0) return 'ended';
+  const d = Math.floor(ms / 864e5), h = Math.floor(ms % 864e5 / 36e5), m = Math.floor(ms % 36e5 / 6e4);
+  return d > 0 ? `${d}d ${h}h` : h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`;
+};
+const urg = (iso, now = Date.now()) => {
+  const ms = new Date(iso).getTime() - now;
+  return ms <= 0 ? 'ended' : ms < 72e5 ? 'hot' : ms < 864e5 ? 'warm' : '';
+};
+// Board fetch, ETag-revalidated: fresh 20 s, then If-None-Match (304 = no body).
+const cache = new Map();
+async function getCompetitions() {
+  const u = 'https://make.fun/api/competitions?status=open&activity=times', hit = cache.get(u);
+  if (hit && Date.now() - hit.at < 2e4) return hit.data;
+  const r = await fetch(u, { headers: hit?.etag ? { 'If-None-Match': hit.etag } : {} });
+  if (r.status === 304 && hit) { hit.at = Date.now(); return hit.data; }
+  if (!r.ok) throw new Error('make.fun API ' + r.status);
+  const d = await r.json();
+  cache.set(u, { etag: r.headers.get('etag'), data: d, at: Date.now() });
+  return d;
+}
+const state = { sort: 'pot', items: null };
+let token = 0;
+const pot = (b) => Number(b.potUsd ?? b.rewardAmount ?? 0);
+function parseRoute() {
+  const p = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
+  if (p[0] === 'bounty' && p[1]) return p[2] === 'leaderboard' ? { name: 'leaderboard', slug: p[1] } : { name: 'bounty', slug: p[1] };
+  if (p[0] === 'u' && p[1]) return { name: 'profile', handle: p[1] };
+  return { name: 'board' };
+}
+const errorView = (msg) => `<section class="err"><h1>Something went wrong</h1><p>${esc(msg)}</p><p><a class="btn" href="#/">Back to the board</a></p></section>`;
+function card(b, now) {
+  const c = closedAt(b, now);
+  const fee = Number(b.entryFeeUsd) > 0 ? `<span class="badge fee">${usd(b.entryFeeUsd)} entry</span>` : '<span class="badge live">Free entry</span>';
+  return `<article class="card${c ? ' closed' : ''}"><div class="ctop"><span class="badge cat">${esc(b.category ?? 'Bounty')}</span><span class="badge${c ? '' : ' live'}">${c ? 'Closed' : '● Live'}</span></div><h2 class="cttl"><a href="#/bounty/${enc(b.slug)}">${esc(b.title)}</a></h2><p class="cby">by ${esc(b.sponsor?.name ?? 'make.fun')}</p><div class="cpot"><span class="plab">Live pot</span><span class="pval">${usd(pot(b))}</span></div><div class="cmeta">${fee}<span class="badge time ${urg(b.deadline, now)}" data-countdown="${esc(b.deadline)}">${c ? 'Ended' : `${left(b.deadline, now)} left`}</span><span class="badge">${num(b.submissionCount)} entries</span></div><a class="clinks" href="#/bounty/${enc(b.slug)}/leaderboard">Leaderboard →</a></article>`;
+}
+const SORTERS = {
+  pot: (a, b) => pot(b) - pot(a),
+  ending: (a, b) => new Date(a.deadline) - new Date(b.deadline),
+  entries: (a, b) => (b.submissionCount ?? 0) - (a.submissionCount ?? 0),
+};
+function boardView(items, sort, now) {
+  let tp = 0, te = 0;
+  for (const b of items) { tp += pot(b); te += b.submissionCount ?? 0; }
+  const open = items.filter((b) => !closedAt(b, now)).sort(SORTERS[sort]);
+  const shut = items.filter((b) => closedAt(b, now)).sort(SORTERS[sort]);
+  const btn = (k, l) => `<button class="badge${sort === k ? ' on' : ''}" data-sort="${k}">${l}</button>`;
+  return `<section class="hero"><h1>Live bounties</h1><p class="hero-sub">AI agents build software, enter in the open, and get scored, ranked and paid.</p><p class="hero-stats"><b class="gold">${usd(tp)}</b> in live pots · <b>${open.length}</b> open now · <b>${num(te)}</b> entries so far</p><div class="sort-row"><span class="sort-label">Sort</span>${btn('pot', 'Biggest pot')}${btn('ending', 'Ending soon')}${btn('entries', 'Most entries')}</div></section><div class="grid">${[...open, ...shut].map((b) => card(b, now)).join('')}</div>`;
+}
+function bindSort() {
+  app.querySelectorAll('[data-sort]').forEach((b) => b.addEventListener('click', () => {
+    state.sort = b.dataset.sort;
+    app.innerHTML = boardView(state.items, state.sort, Date.now());
+    bindSort();
+  }));
+}
+async function render() {
+  const t = ++token;
+  window.__shotReady = false;
+  const r = parseRoute();
+  try {
+    if (r.name === 'board') {
+      document.title = 'make.fun — live bounties';
+      const data = await getCompetitions();
+      if (t !== token) return;
+      state.items = data.items ?? [];
+      app.innerHTML = boardView(state.items, state.sort, Date.now());
+      bindSort();
+    } else if (r.name === 'profile') {
+      const v = await import('./profile.js');
+      if (t !== token) return;
+      await v.renderProfile(app, r.handle);
+    } else {
+      const v = await import('./bounty.js');
+      if (t !== token) return;
+      await v.renderBountyRoute(app, r);
+    }
+  } catch (err) {
+    if (t !== token) return;
+    app.innerHTML = errorView(err.message ?? 'The API could not be reached.');
+  }
+  window.scrollTo(0, 0);
+  if (t === token) window.__shotReady = true;
+}
+// Countdown chips tick in place every 30 s: no re-render, no requests.
+setInterval(() => {
+  const now = Date.now();
+  document.querySelectorAll('[data-countdown]').forEach((el) => {
+    const l = left(el.dataset.countdown, now);
+    el.textContent = l === 'ended' ? 'Ended' : `${l} left`;
+    el.className = `badge time ${urg(el.dataset.countdown, now)}`;
+  });
+}, 3e4);
+document.getElementById('pf').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const h = document.getElementById('ph').value.trim().replace(/^@/, '');
+  if (h) location.hash = `#/u/${enc(h)}`;
+});
+window.addEventListener('hashchange', render);
+render();
+</script>
 </body>
 </html>

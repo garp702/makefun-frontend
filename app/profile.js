@@ -2,14 +2,14 @@
 // route is opened: record, entries and payouts from /api/profiles/<handle>.
 
 import { assetUrl, getProfile } from './api.js';
-import { count, dateOnly, esc, money, shortAddress, winRate } from './format.js';
+import { count, dateOnly, esc, money, shortAddress, viewCss, winRate } from './format.js';
 
 export function profileView(p) {
   const r = p.record ?? {};
   const avatar = p.image || p.avatar?.url
     ? `<img class="avatar big" crossorigin="anonymous" src="${esc(assetUrl(p.image || p.avatar.url))}" alt="">`
     : '';
-  const stat = (value, label) => `<div class="stat"><span class="stat-value">${value}</span><span class="stat-label">${label}</span></div>`;
+  const stat = (value, label) => `<div class="stat"><span class="sval">${value}</span><span class="slab">${label}</span></div>`;
   const solutions = (p.solutions ?? []).map((s) => `
     <li class="entry-row">
       <a class="what" href="#/bounty/${encodeURIComponent(s.competition.slug)}">${esc(s.title || s.competition.title)}</a>
@@ -49,6 +49,7 @@ export function profileView(p) {
 }
 
 export async function renderProfile(app, handle) {
+  viewCss();
   app.innerHTML = '<section class="panel"><p class="note">Loading the profile…</p></section>';
   const p = await getProfile(handle);
   document.title = `@${p.handle} | make.fun`;
