@@ -1,35 +1,80 @@
-// A working makefun-frontend-01 entry (Node 22, standard library only): the frontend is this directory's app/
-// folder, plain static files a browser opens at app/index.html (ES modules, CSS, no build step), reading make.fun's
-// public API at https://make.fun/api. The program hands it in: it copies app/ and screenshots/ from beside this file
-// to /output and writes /output/dossier.json, the summary the judge reads (your screenshots, the first load's files
-// and bytes, and your source), with the vendored make.fun library. Leave vendor/makefun-frontend.ts as it is: the
-// scorer requires dossier.json to be byte for byte what its own copy writes.
+// Entrypoint for the makefun-frontend-01 submission.
 //
-// A starting point, not a winner: a plain board of open bounties and a page for each. Build your frontend in app/
-// (a leaderboard, profiles, speed, ease of use), put 3 PNG or JPEG screenshots of it running on live data in
-// screenshots/ (the first by name is the cover; shots.json says which views this starter's were taken of), and run it.
+// The deliverable itself is the static site under app/: plain HTML, CSS
+// and ES modules that a browser opens directly, with no bundling step in
+// between. This script is only the hand-in step the grader runs. It
+// stages the site (plus the screenshot set, when the repo carries one)
+// into the output directory, then asks the vendored make.fun library to
+// describe the staged tree in dossier.json, which is what the judge
+// scores from.
 //
-// Serve it locally with `node serve.ts`, then open http://localhost:8080.
-// Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
-//   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+// Run it the way the grader does:
+//   node main.ts
+// Outside the grading container, MAKEFUN_OUTPUT_DIR names the output
+// directory in place of the default /output.
 
-import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { cpSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-frontend.ts';
 
-const here = fileURLToPath(new URL('.', import.meta.url));
-const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+// Caps handed to the dossier builder. They mirror the limits the scorer
+// enforces, so an oversized entry trips here first instead of only
+// being refused after submission.
+const DOSSIER_CAPS = {
+  text_max_bytes: 163840,
+  screenshots: { max: 3, max_bytes: 262144 },
+  app_max_files: 993,
+  app_max_bytes: 16777216,
+};
 
-mkdirSync(out, { recursive: true });
-cpSync(join(here, 'app'), join(out, 'app'), { recursive: true });
-mkdirSync(join(out, 'screenshots'), { recursive: true });
-if (existsSync(join(here, 'screenshots'))) cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
+const rootDir = dirname(fileURLToPath(import.meta.url));
+const targetDir = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
-// The scorer's own caps (reference/gate.json): only text_max_bytes shapes the bytes; the others refuse an entry the
-// scorer would refuse (more than 3 screenshots or one over 256 KiB; more than 993 files and directories in app/ or
-// 16 MiB of app files: app/ counts beside /output's own 1000-entry cap, its screenshots/ and dossier.json).
-writeFileSync(
-  join(out, 'dossier.json'),
-  buildDossier(out, { text_max_bytes: 163840, screenshots: { max: 3, max_bytes: 262144 }, app_max_files: 993, app_max_bytes: 16777216 }),
-);
+// Copy one directory tree into another, creating the destination first.
+function stageTree(from: string, to: string): void {
+  mkdirSync(to, { recursive: true });
+  cpSync(from, to, { recursive: true });
+}
+
+// Count the regular files below a directory; feeds the summary line.
+function countStagedFiles(dir: string): number {
+  let total = 0;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) total += countStagedFiles(join(dir, entry.name));
+    else if (entry.isFile()) total += 1;
+  }
+  return total;
+}
+
+function handIn(): void {
+  const appSource = join(rootDir, 'app');
+  if (!existsSync(appSource)) {
+    throw new Error('cannot hand in: this entry has no app/ directory to stage');
+  }
+
+  mkdirSync(targetDir, { recursive: true });
+  stageTree(appSource, join(targetDir, 'app'));
+
+  // The output always gets a screenshots/ folder; its contents are
+  // copied over only when the repo actually carries screenshots.
+  const shotsTarget = join(targetDir, 'screenshots');
+  mkdirSync(shotsTarget, { recursive: true });
+  const shotsSource = join(rootDir, 'screenshots');
+  if (existsSync(shotsSource)) stageTree(shotsSource, shotsTarget);
+
+  const dossierPath = join(targetDir, 'dossier.json');
+  writeFileSync(dossierPath, buildDossier(targetDir, DOSSIER_CAPS));
+
+  // A zero-byte dossier would mean the hand-in silently produced
+  // nothing for the judge, so fail loudly instead of reporting success.
+  const dossierBytes = statSync(dossierPath).size;
+  if (dossierBytes === 0) {
+    throw new Error('cannot hand in: dossier.json came out empty');
+  }
+
+  const staged = countStagedFiles(join(targetDir, 'app'));
+  console.log(`handed in: ${staged} app file(s) staged in ${targetDir}; dossier.json is ${dossierBytes} bytes`);
+}
+
+handIn();
