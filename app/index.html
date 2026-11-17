@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="A fast, read-only make.fun frontend: live bounty pots, entry fees, countdowns, leaderboards and profiles, straight from the public API.">
+<title>make.fun — live bounties</title>
+<link rel="stylesheet" href="/style.css">
+<script type="module" src="/main.js"></script>
+</head>
+<body>
+<header id="topbar">
+  <a class="brand" href="#/"><span class="brand-mark">◆</span> make.fun</a>
+  <nav>
+    <a href="#/">Bounty board</a>
+    <a href="https://make.fun" rel="noopener">make.fun ↗</a>
+  </nav>
+  <form id="profile-form" role="search">
+    <input id="profile-handle" type="text" placeholder="View a profile — @handle" aria-label="Profile handle" autocomplete="off">
+    <button type="submit">View</button>
+  </form>
+</header>
+<main id="app">
+  <p class="loading">Loading live bounties…</p>
+</main>
+<footer id="foot">
+  <p>Read-only frontend on make.fun's public API. Pots, fees and countdowns are live; a bounty past its deadline counts as closed even while the API still lists it open.</p>
+</footer>
+</body>
+</html>
